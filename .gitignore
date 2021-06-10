@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/2_logistic_regression_cifar/data/
+/3_cnn_svhn/data/
+/3_cnn_svhn/models/
+/3_cnn_svhn/trained_models/
+/4_transfer_learning/data/
+/4_transfer_learning/.idea/
+/4_transfer_learning/data/robot/
