@@ -8,8 +8,16 @@ class FineTune(nn.Module):
     def __init__(self, base_model):
         super(FineTune,self).__init__()
         self.model = getattr(models,base_model)(pretrained=True)
-        in_features = self.model.fc.in_features
-        self.model.fc = nn.Linear(in_features, 2)
+        if base_model == "vgg16":
+            in_features = self.model.classifier._modules['6'].in_features
+            self.model.classifier._modules['6'] = nn.Linear(in_features, 2)
+        elif base_model == "resnet18":
+            in_features = self.model.fc.in_features
+            self.model.fc = nn.Linear(in_features, 2)
+        elif base_model == "densenet121":
+            in_features = self.model.classifier.in_features
+            self.model.classifier = nn.Linear(in_features,2)
+
 
 
     def forward(self, images):

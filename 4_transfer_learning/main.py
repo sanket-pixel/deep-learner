@@ -7,7 +7,7 @@ from torchvision import transforms
 import numpy as np
 
 from dataset import RobotsHumansDataset, offline_augmentation, flip, mirror
-from model import FineTune
+from model import FineTune, FixedFeatureMLP
 import utils
 from matplotlib import pyplot as plt
 
@@ -15,6 +15,8 @@ from matplotlib import pyplot as plt
 data_root = "data"
 model_root = "model"
 classes_path = "classes.txt"
+
+
 # generate train, test, classes text files
 if not os.path.exists(os.path.join(data_root,classes_path)):
     utils.generate_test_train_text_file(0.8,"data")
@@ -50,6 +52,7 @@ def eval_model(model):
     correct = 0
     total = 0
     loss_list = []
+    criterion = torch.nn.CrossEntropyLoss().to(device)
 
     for batch in dataloader_validation:
 
@@ -73,57 +76,67 @@ def eval_model(model):
     return accuracy, loss
 
 
-def save_model(model, model_name):
+def save_model(model, stats, model_name):
+    model_dict = {"model":model, "stats":stats}
+    torch.save(model_dict,os.path.join(model_root, "{}.pth".format(model_name)))
 
-    torch.save(model,os.path.join(model_root, "{}.pth".format(model_name)))
 
-LR = 3e-4
-EPOCHS = 10
-EVAL_FREQ = 1
-SAVE_FREQ = 10
 
-stats = {
-    "epoch": [],
-    "train_loss": [],
-    "valid_loss": [],
-    "accuracy": []
-}
+def train_model(base_model,model_type, model_name):
+    LR = 1e-5
+    EPOCHS = 5
+    EVAL_FREQ = 1
+    SAVE_FREQ = 10
 
-model = FineTune(base_model='resnet18')
-model.to(device)
-criterion = torch.nn.CrossEntropyLoss().to(device)
-optimizer = torch.optim.Adam(params=model.parameters(),lr = LR)
+    stats = {
+        "epoch": [],
+        "train_loss": [],
+        "valid_loss": [],
+        "accuracy": []
+    }
 
-init_epoch = 0
-loss_hist = []
-for epoch in range(2):
-    loss_list = []
-    progress_bar = tqdm(enumerate(dataloader_train), total=len(dataloader_train))
-    for i, batch in progress_bar:
-        image = batch[0].to(device)
-        labels = batch[1].to(device)
 
-        optimizer.zero_grad()
-        y = model(image)
-        loss = criterion(y, labels)
-        loss_list.append(loss.item())
 
-        loss.backward()
-        optimizer.step()
-        progress_bar.set_description(f"Epoch {0 + 1} Iter {i + 1}: loss {loss.item():.5f}. ")
+    model = globals()[model_type](base_model=base_model)
+    model.to(device)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.Adam(params=model.parameters(),lr = LR)
 
-    loss_hist.append(np.mean(loss_list))
-    stats['epoch'].append(epoch)
-    stats['train_loss'].append(loss_hist[-1])
+    init_epoch = 0
+    loss_hist = []
+    for epoch in range(init_epoch, EPOCHS):
+        loss_list = []
+        progress_bar = tqdm(enumerate(dataloader_train), total=len(dataloader_train))
+        for i, batch in progress_bar:
+            image = batch[0].to(device)
+            labels = batch[1].to(device)
 
-    if epoch % EVAL_FREQ == 0:
-        accuracy, valid_loss = eval_model(model)
-        print(f"Accuracy at epoch {epoch}: {round(accuracy, 2)}%")
-    else:
-        accuracy, valid_loss = -1, -1
-    stats["accuracy"].append(accuracy)
-    stats["valid_loss"].append(valid_loss)
+            optimizer.zero_grad()
+            y = model(image)
+            loss = criterion(y, labels)
+            loss_list.append(loss.item())
 
-    # saving checkpoint
-    if epoch % SAVE_FREQ == 0:
-        save_model(model, "fine_tune_resnet_18")
+            loss.backward()
+            optimizer.step()
+            progress_bar.set_description(f"Epoch {0 + 1} Iter {i + 1}: loss {loss.item():.5f}. ")
+
+        loss_hist.append(np.mean(loss_list))
+        stats['epoch'].append(epoch)
+        stats['train_loss'].append(loss_hist[-1])
+
+        if epoch % EVAL_FREQ == 0:
+            accuracy, valid_loss = eval_model(model)
+            print(f"Accuracy at epoch {epoch}: {round(accuracy, 2)}%")
+        else:
+            accuracy, valid_loss = -1, -1
+        stats["accuracy"].append(accuracy)
+        stats["valid_loss"].append(valid_loss)
+
+        # saving checkpoint
+        if epoch % SAVE_FREQ == 0:
+            save_model(model, stats, model_name)
+
+train_model(base_model="vgg16", model_type="FineTune", model_name="fine_tune_vgg")
+train_model(base_model="densenet121", model_type="FineTune", model_name="fine_tune_densenet")
+# model = torch.load(os.path.join(model_root,"fine_tune_resnet_18.pth"))["model"]
+# print(eval_model(model.eval()))
